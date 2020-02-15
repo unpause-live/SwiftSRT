@@ -11,8 +11,16 @@
 import PackageDescription
 
 let srtVersion = "\"1.4.1\""
-let cOpts: [CSetting] = [.define("USE_OPENSSL"), .define("SRT_VERSION", to: srtVersion)]
-let cxxOpts: [CXXSetting] = [.define("USE_OPENSSL"), .define("SRT_VERSION", to: srtVersion)]
+let cOpts: [CSetting] = [.define("USE_OPENSSL"),
+                         .define("SRT_VERSION", to: srtVersion),
+                         .define("LINUX", .when(platforms: [.linux])),
+                         .define("OSX", .when(platforms: [.macOS])),
+                         .define("IOS", .when(platforms: [.iOS, .tvOS]))]
+let cxxOpts: [CXXSetting] = [.define("USE_OPENSSL"),
+                             .define("SRT_VERSION", to: srtVersion),
+                             .define("LINUX", .when(platforms: [.linux])),
+                             .define("OSX", .when(platforms: [.macOS])),
+                             .define("IOS", .when(platforms: [.iOS, .tvOS]))]
 
 let package = Package(
     name: "SwiftSRT",
@@ -23,7 +31,10 @@ let package = Package(
     products: [
         .library(
             name: "SRT",
-            targets:["SwiftSRT"])
+            targets:["SRT"]),
+        .executable(
+            name: "ClientServerExample",
+            targets: ["ClientServerExample"])
     ],
     dependencies: [.package(url: "https://github.com/apple/swift-nio.git", from: "2.9.0")],
     targets: [
@@ -39,10 +50,12 @@ let package = Package(
                 dependencies: ["OpenSSL"],
                 cSettings: cOpts,
                 cxxSettings: cxxOpts),
-        .target(name: "SwiftSRT",
+        .target(name: "SRT",
                 dependencies: ["NIO", "CSRT"],
                 cSettings: cOpts,
-                cxxSettings: cxxOpts)
+                cxxSettings: cxxOpts),
+        .target(name: "ClientServerExample",
+            dependencies: ["SRT"])
     ],
     swiftLanguageVersions: [.v5],
     cxxLanguageStandard: .cxx11
