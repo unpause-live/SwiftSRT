@@ -1,6 +1,7 @@
 import NIO
 import SRT
 import Foundation
+import Dispatch
 
 let host = "127.0.0.1"
 let port = 1999
@@ -10,8 +11,8 @@ let isServer = !args.contains("-c")
 var conn: Connection?
 
 let allocator = ByteBufferAllocator()
-let str = "Hello Friend"
-var buf = allocator.buffer(capacity: 1316)
+let str = String(repeating: "Hello Friend", count: 250)
+var buf = allocator.buffer(capacity: 4096)
 buf.writeString(str)
 
 let connected: ConnectionStateCallback = {
@@ -19,7 +20,9 @@ let connected: ConnectionStateCallback = {
     conn = $0
     if !isServer {
         // have the client write some data
-        $0.write(buf)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
+            conn?.write(buf)
+        }
     }
 }
 

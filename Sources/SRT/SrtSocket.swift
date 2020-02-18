@@ -15,7 +15,7 @@ class SrtBaseSocket {
         if setNonBlocking {
             var noVal: Bool = false
             _ = try checkError(srt_setsockopt(descriptor, 0, SRTO_RCVSYN, &noVal, Int32(MemoryLayout<Bool>.size)))
-            _ = try checkError(srt_setsockopt(descriptor, 0, SRTO_SNDSYN, &noVal, Int32(MemoryLayout<Bool>.size)))
+            //_ = try checkError(srt_setsockopt(descriptor, 0, SRTO_SNDSYN, &noVal, Int32(MemoryLayout<Bool>.size)))
         }
     }
 

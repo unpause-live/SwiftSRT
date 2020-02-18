@@ -1,6 +1,7 @@
 import NIO
 import CSRT
 import Foundation
+import Dispatch
 
 internal final class SrtChildChannel {
     /// The `ByteBufferAllocator` for this `Channel`.
@@ -26,6 +27,8 @@ internal final class SrtChildChannel {
 
     private let _socket: SrtSocket
 
+    private let sendQueue: DispatchQueue
+
     internal init(channelInit: ChannelInitializerCallback? = nil,
                   socket: SrtSocket? = nil,
                   parent: Channel? = nil,
@@ -35,6 +38,7 @@ internal final class SrtChildChannel {
         self.closePromise = eventLoop.makePromise()
         self.parent = parent
         self._socket = try socket ?? SrtSocket()
+        self.sendQueue = DispatchQueue(label: "sendQueue.\(UUID().uuidString)")
         // Must come last, as it requires self to be completely initialized.
         self._pipeline = ChannelPipeline(channel: self)
     }
@@ -124,17 +128,25 @@ extension SrtChildChannel: ChannelCore {
     ///     - data: The data to write, wrapped in a `NIOAny`.
     ///     - promise: The `EventLoopPromise` which should be notified once the operation completes, or nil if no notification should take place.
     func write0(_ data: NIOAny, promise: EventLoopPromise<Void>?) {
-        //promise?.fail(ChannelError.operationUnsupported)
-        print("data = \(data)")
-        let data = self.unwrapData(data, as: ByteBuffer.self)
-        print("ChildChannel.write0")
-        do {
-            _ = try data.withUnsafeReadableBytes {
-                try self._socket.write(pointer: $0)
+        self.sendQueue.async { [weak self] in
+            guard let strongSelf = self else { return }
+            var data = strongSelf.unwrapData(data, as: ByteBuffer.self)
+            do {
+                while data.readableBytes > 0 {
+                    let data0 = data.getSlice(at: data.readerIndex, length: min(data.readableBytes, 1316)) 
+                    let result = try data0?.withUnsafeReadableBytes {
+                        try strongSelf._socket.write(pointer: $0)
+                    }
+                    if case .processed(let value) = result {
+                        data.moveReaderIndex(forwardBy: Int(value))
+                    }
+                }
+                promise?.succeed(())
+            } catch {
+                promise?.fail(error)
             }
-        } catch {
-            promise?.fail(error)
         }
+        
     }
 
     /// Try to flush out all previous written messages that are pending.
