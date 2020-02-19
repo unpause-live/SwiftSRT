@@ -1,3 +1,16 @@
+/*
+ * SwiftSRT
+ * Copyright (c) 2020 Unpause SAS
+ *
+ * SRT - Secure, Reliable, Transport
+ * Copyright (c) 2018 Haivision Systems Inc.
+ * 
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * 
+ */
+
 import NIO
 import CSRT
 import Foundation
@@ -142,7 +155,7 @@ extension SrtClientChannel: ChannelCore {
         if !self._writable {
             // plug the queue until the connection is writable
             self.sendQueue.async { [weak self] in
-                do { 
+                do {
                     try self?.openPromise.futureResult.wait()
                 } catch {}
             }
@@ -152,7 +165,7 @@ extension SrtClientChannel: ChannelCore {
             var data = strongSelf.unwrapData(data, as: ByteBuffer.self)
             do {
                 while data.readableBytes > 0 {
-                    let data0 = data.getSlice(at: data.readerIndex, length: min(data.readableBytes, 1316)) 
+                    let data0 = data.getSlice(at: data.readerIndex, length: min(data.readableBytes, 1316))
                     let result = try data0?.withUnsafeReadableBytes {
                         try strongSelf._socket.write(pointer: $0)
                     }
@@ -165,7 +178,6 @@ extension SrtClientChannel: ChannelCore {
                 promise?.fail(error)
             }
         }
-        
     }
 
     /// Try to flush out all previous written messages that are pending.
