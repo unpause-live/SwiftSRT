@@ -6,7 +6,7 @@ This wrapper is based on [swift-nio](https://github.com/apple/swift-nio) and is 
 must use an `SrtEventLoopGroup` instance instead of a typical `MultithreadedEventLoopGroup` because the SRT sockets live
 in userspace and are therefore incompatible with a standard NIO event loop.
 
-See https://github.com/unpause-live/SwiftSRT/tree/master/Sources/ClientServerExample for a usage example.
+See [ClientServerExample](https://github.com/unpause-live/SwiftSRT/tree/master/Sources/ClientServerExample) for a usage example.
 
 Work done / to be done:
 - [x] Linux compatibility
