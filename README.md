@@ -7,3 +7,35 @@ must use an `SrtEventLoopGroup` instance instead of a typical `MultithreadedEven
 in userspace and are therefore incompatible with a standard NIO event loop.
 
 See Sources/ClientServerExample for a usage example.
+
+Work done / to be done:
+- [x] Linux compatibility
+- [x] macOS compatibility
+- [ ] iOS compatibility
+- [ ] Android compatibility
+- [x] Server accepts (IPv4)
+- [x] Client calls out (IPv4)
+- [x] "Live" mode
+- [ ] "File" mode
+- [ ] "Rendez-vous" connections
+- [ ] Bandwidth statistics
+- [ ] Encryption
+- [ ] Bonding
+- Options:
+    - [x] MaxBW
+    - [x] Passphrase
+    - [x] Stream ID
+    - [x] Payload Size
+    - [x] Reuse Address
+    - [ ] MSS
+    - [ ] Packet Filter
+    - [ ] PB Key Length
+    - [ ] Peer Latency
+    - [ ] Peer Idle Time
+    - [ ] Peer Version
+    - [ ] KM State
+    - [ ] Recv Latency
+    - [ ] Congestion
+    - [ ] Send Buffer Size
+    - [ ] Too Late Packet Drop
+    - [ ] Enforced Encryption
