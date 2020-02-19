@@ -21,6 +21,8 @@ internal final class SrtServerChannel {
 
     private var childChannelInit: ChannelInitializerCallback?
 
+    private let childChannelOptions: ChannelOptions.Storage
+
     /// An `EventLoopFuture` that will complete when this channel is finally closed.
     public var closeFuture: EventLoopFuture<Void> {
         return self.closePromise.futureResult
@@ -44,11 +46,13 @@ internal final class SrtServerChannel {
     private var backlogSize: Int32 = 128
 
     internal init(childInitializer: ChannelInitializerCallback?,
+                  childOptions: ChannelOptions.Storage,
                   eventLoop: SrtEventLoopGroup,
                   childLoopGroup: SrtEventLoopGroup) throws {
         self.childChannelInit = childInitializer
         self._eventLoop = eventLoop
         self.closePromise = eventLoop.makePromise()
+        self.childChannelOptions = childOptions
         //self.connectionQueue = _eventLoop.channelQueue(label: "nio.transportservices.listenerchannel", qos: qos)
         self.childLoopGroup = childLoopGroup
         self.serverSocket = try SrtServerSocket()
@@ -209,9 +213,13 @@ extension SrtServerChannel: SrtChannel {
             let events: Int32 = -2147483648 | Int32(SRT_EPOLL_IN.rawValue |
                                        SRT_EPOLL_OUT.rawValue |
                                        SRT_EPOLL_ERR.rawValue)
-            self.childLoopGroup.registerChannel(child, events)
-            self.childChannelInit?(child)
-            child.pipeline.fireChannelActive()
+            self.childChannelOptions.applyAllChannelOptions(to: child)
+                .flatMap { self.childLoopGroup.registerChannel(child, events) }
+                .whenSuccess { [weak self] _ in
+                    self?.childChannelInit?(child).whenSuccess { _ in
+                        child.pipeline.fireChannelActive()
+                    }
+                }
         } catch {
             self._pipeline.fireErrorCaught(error)
         }
@@ -261,12 +269,10 @@ extension SrtServerChannel: SrtChannel {
 
     private func setOption0<Option: ChannelOption>(option: Option, value: Option.Value) throws {
         switch option {
-        case let optionValue as ChannelOptions.Types.SocketOption:
-            try self.serverSocket.setOption(level: optionValue.level, name: optionValue.name, value: value)
         case is ChannelOptions.Types.BacklogOption:
             guard let value = value as? Int32 else { return }
             self.backlogSize = value
-        default: ()
+        default: try self.serverSocket.setOption(option: option, value: value)
         }
     }
 
@@ -282,12 +288,10 @@ extension SrtServerChannel: SrtChannel {
 
     func getOption0<Option: ChannelOption>(option: Option) throws -> Option.Value {
         switch option {
-        case let optionValue as ChannelOptions.Types.SocketOption:
-            return try self.serverSocket.getOption(level: optionValue.level, name: optionValue.name)
         case is ChannelOptions.Types.BacklogOption:
             // swiftlint:disable:next force_cast
             return self.backlogSize as! Option.Value
-        default: throw ChannelError.operationUnsupported
+        default: return try self.serverSocket.getOption(option: option)
         }
     }
 }

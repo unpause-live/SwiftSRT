@@ -203,8 +203,9 @@ extension SrtClientChannel: ChannelCore {
         } catch {
             promise?.fail(error)
         }
-        self._eventLoop.unregisterChannel(self)
-        self.closePromise.succeed(())
+        self._eventLoop.unregisterChannel(self).whenComplete { _ in
+            self.closePromise.succeed(())
+        }
     }
 
     /// Trigger an outbound event.
@@ -260,7 +261,7 @@ extension SrtClientChannel: SrtChannel {
         } catch SrtMajorError.connection(let minor) {
             if minor == .connLost {
                 self._pipeline.fireChannelInactive()
-                self._pipeline.close()
+                _ = self._pipeline.close()
             }
         } catch {
             // Caught some other error - report it.
@@ -317,11 +318,7 @@ extension SrtClientChannel: SrtChannel {
     }
 
     private func setOption0<Option: ChannelOption>(option: Option, value: Option.Value) throws {
-        switch option {
-        case let optionValue as ChannelOptions.Types.SocketOption:
-            try self._socket.setOption(level: optionValue.level, name: optionValue.name, value: value)
-        default: ()
-        }
+        try self._socket.setOption(option: option, value: value)
     }
 
     public func getOption<Option: ChannelOption>(_ option: Option) -> EventLoopFuture<Option.Value> {
@@ -335,10 +332,6 @@ extension SrtClientChannel: SrtChannel {
     }
 
     func getOption0<Option: ChannelOption>(option: Option) throws -> Option.Value {
-        switch option {
-        case let optionValue as ChannelOptions.Types.SocketOption:
-            return try self._socket.getOption(level: optionValue.level, name: optionValue.name)
-        default: throw ChannelError.operationUnsupported
-        }
+         try self._socket.getOption(option: option)
     }
 }

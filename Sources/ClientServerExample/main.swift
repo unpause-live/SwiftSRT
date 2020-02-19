@@ -16,12 +16,15 @@ var buf = allocator.buffer(capacity: 4096)
 buf.writeString(str)
 
 let connected: ConnectionStateCallback = {
-    print("got a connection")
     conn = $0
     if !isServer {
         // have the client write some data
         conn?.write(buf)?.whenComplete { result in
             print("write result=\(result)")
+        }
+    } else {
+        $0.getName()?.whenSuccess {
+            print("got a connection from \($0)")
         }
     }
 }
@@ -41,11 +44,8 @@ if isServer {
     let serverChannel = try SrtServerBootstrap(group: group)
         // Define backlog and enable SO_REUSEADDR options at the server level
         .serverChannelOption(ChannelOptions.backlog, value: 256)
-        //.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-
-        // .serverChannelInitializer { channel in
-        //     print("\(channel) initialized")
-        // }
+        .serverChannelOption(SrtChannelOptions.minVersion, value: makeSrtVersion(1, 3, 0))
+        .serverChannelOption(SrtChannelOptions.reuseAddr, value: true)
         // Handler Pipeline: handlers that are processing events from accepted Channels
         // To demonstrate that we can have several reusable handlers we start with a Swift-NIO default
         // handler that limits the speed at which we read from the client if we cannot keep up with the
@@ -57,14 +57,10 @@ if isServer {
                 channel.pipeline.addHandler(Connection(connected: connected, received: recv, ended: ended))
             }
         }
-
-        // Enable common socket options at the channel level (TCP_NODELAY and SO_REUSEADDR).
         // These options are applied to accepted Channels
-        .childChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-        // Message grouping
-        .childChannelOption(ChannelOptions.maxMessagesPerRead, value: 16)
         // Let Swift-NIO adjust the buffer size, based on actual trafic.
-        .childChannelOption(ChannelOptions.recvAllocator, value: AdaptiveRecvByteBufferAllocator())
+        .childChannelOption(SrtChannelOptions.maxBW, value: -1)
+        //
         .bind(host: host, port: port).wait()
     // Block until the server channel closes
     try serverChannel.closeFuture.wait()
@@ -77,6 +73,9 @@ if isServer {
                channel.pipeline.addHandler(Connection(connected: connected, received: recv, ended: ended))
            }
         }
+        .channelOption(SrtChannelOptions.maxBW, value: -1)
+        .channelOption(SrtChannelOptions.minVersion, value: makeSrtVersion(1, 3, 0))
+        .channelOption(SrtChannelOptions.streamID, value: "client")
         .connect(host: host, port: port).wait()
     // Block until the client channel closes
     try clientChannel.closeFuture.wait()

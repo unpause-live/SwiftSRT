@@ -126,14 +126,17 @@ public final class SrtServerBootstrap {
         }
         print("at bind")
         let channel = try SrtServerChannel(childInitializer: childChannelInit,
+                                           childOptions: childChannelOptions,
                                            eventLoop: group,
                                            childLoopGroup: childGroup)
-        return group.next().submit {
-            channel.bind(to: try makeSocketAddress(), promise: nil)
-            // Because of the way Swift enforces integer overflows, we can't use the SRT_EPOLL_ET constant here
-            _ = group.registerChannel(channel, -2147483648 | Int32(SRT_EPOLL_IN.rawValue |
-                                                                   SRT_EPOLL_ERR.rawValue))
-            return channel
+        return serverChannelOptions.applyAllChannelOptions(to: channel).flatMap {
+            group.next().submit {
+                channel.bind(to: try makeSocketAddress(), promise: nil)
+                // Because of the way Swift enforces integer overflows, we can't use the SRT_EPOLL_ET constant here
+                _ = group.registerChannel(channel, -2147483648 | Int32(SRT_EPOLL_IN.rawValue |
+                                                                       SRT_EPOLL_ERR.rawValue))
+                return channel
+            }
         }
     }
 
@@ -182,11 +185,13 @@ public final class SrtClientBootstrap {
         let events: Int32 = -2147483648 | Int32(SRT_EPOLL_IN.rawValue |
                                        SRT_EPOLL_OUT.rawValue |
                                        SRT_EPOLL_ERR.rawValue)
-        return group.registerChannel(channel, events).flatMap { _ in
-            group.submit {
-                channel.connect(to: try makeSocketAddress(), promise: nil)
-                return channel
-            }
-        }
+        return channelOptions.applyAllChannelOptions(to: channel)
+                .flatMap { group.registerChannel(channel, events) }
+                .flatMap { _ in
+                    group.submit {
+                        channel.connect(to: try makeSocketAddress(), promise: nil)
+                        return channel
+                    }
+                }
     }
 }

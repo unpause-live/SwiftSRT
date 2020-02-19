@@ -55,13 +55,56 @@ class SrtBaseSocket {
         try get_addr { _ = try checkError(srt_getpeername($0, $1, $2)) }
     }
 
-    final func setOption<T>(level: Int32, name: Int32, value: T) throws {
+    //
+    // There may be a better way to unwrap these options, but I will need to do some investigation here.
+    //
+    // swiftlint:disable cyclomatic_complexity
+    final func setOption<Option: ChannelOption>(option: Option, value: Option.Value) throws {
         var value = value
-        let size = Int32(MemoryLayout<T>.size)
-        _ = try checkError(srt_setsockflag(descriptor, SRT_SOCKOPT(rawValue: UInt32(name)), &value, size))
+        let size = Int32(MemoryLayout<Option.Value>.size)
+        switch option {
+        case let option as SrtChannelOptions.Types.SrtPassphrase:
+            guard let valStr = value as? String else { throw ChannelError.operationUnsupported }
+            try valStr.utf8CString.withUnsafeBufferPointer {
+                guard let ptr = $0.baseAddress else { throw ChannelError.operationUnsupported }
+                _ = try checkError(srt_setsockflag(self.descriptor, option.name, ptr, Int32($0.count)))
+            }
+        case let option as SrtChannelOptions.Types.SrtStreamID:
+            guard let valStr = value as? String else { throw ChannelError.operationUnsupported }
+            try valStr.utf8CString.withUnsafeBufferPointer {
+                guard let ptr = $0.baseAddress else { throw ChannelError.operationUnsupported }
+                _ = try checkError(srt_setsockflag(self.descriptor, option.name, ptr, Int32($0.count)))
+            }
+        // There is probably a better pattern here, but need to figure it out (the obvious doesn't work due to generics)
+        case let option as SrtChannelOptions.Types.SrtMaxBW:
+            _ = try checkError(srt_setsockflag(descriptor, option.name, &value, size))
+        case let option as SrtChannelOptions.Types.SrtPayloadSize:
+            _ = try checkError(srt_setsockflag(descriptor, option.name, &value, size))
+        case let option as SrtChannelOptions.Types.SrtMinVersion:
+            _ = try checkError(srt_setsockflag(descriptor, option.name, &value, size))
+        case let option as SrtChannelOptions.Types.SrtReuseAddr:
+            _ = try checkError(srt_setsockflag(descriptor, option.name, &value, size))
+        default: ()
+        }
     }
 
-    func getOption<T>(level: Int32, name: Int32) throws -> T {
+    func getOption<Option: ChannelOption>(option: Option) throws -> Option.Value {
+        switch option {
+        case let option as SrtChannelOptions.Types.SrtStreamID:
+            guard let result = try getStringValue(descriptor: descriptor, name: option.name) as? Option.Value else {
+                throw ChannelError.operationUnsupported
+            }
+            return result
+        case let option as SrtChannelOptions.Types.SrtMaxBW:
+            return try getNumericValue(descriptor: descriptor, name: option.name)
+        case let option as SrtChannelOptions.Types.SrtPayloadSize:
+            return try getNumericValue(descriptor: descriptor, name: option.name)
+        case let option as SrtChannelOptions.Types.SrtMinVersion:
+            return try getNumericValue(descriptor: descriptor, name: option.name)
+        default: throw ChannelError.operationUnsupported
+        }
+    }
+    private func getNumericValue<T>(descriptor: Int32, name: SRT_SOCKOPT) throws -> T {
         var size = Int32(MemoryLayout<T>.size)
         let storage = UnsafeMutableRawBufferPointer.allocate(byteCount: MemoryLayout<T>.stride,
                                                      alignment: MemoryLayout<T>.alignment)
@@ -73,11 +116,25 @@ class SrtBaseSocket {
             val.deinitialize(count: 1)
             storage.deallocate()
         }
-
-        _ = try checkError(srt_getsockflag(descriptor, SRT_SOCKOPT(rawValue: UInt32(name)), val, &size))
+        _ = try checkError(srt_getsockflag(descriptor, name, val, &size))
         return val.pointee
     }
 
+    private func getStringValue(descriptor: Int32, name: SRT_SOCKOPT) throws -> String {
+        var size: Int32 = 512
+        let storage = UnsafeMutableRawBufferPointer.allocate(byteCount: Int(size), alignment: 0)
+        // write zeroes into the memory as Linux's getsockopt doesn't zero them out
+        storage.initializeMemory(as: UInt8.self, repeating: 0)
+        defer {
+            storage.deallocate()
+        }
+        guard let ptr = storage.baseAddress else { throw ChannelError.operationUnsupported }
+
+        _ = try checkError(srt_getsockflag(descriptor, name, ptr, &size))
+        return String(data: Data(bytes: ptr, count: Int(size)), encoding: .utf8) ?? ""
+    }
+
+    // swiftlint:enable cyclomatic_complexity
     typealias AddressBody = (Int32, UnsafeMutablePointer<sockaddr>, UnsafeMutablePointer<Int32>) throws -> Void
     private func get_addr(_ body: AddressBody) throws -> SocketAddress {
         var addr = sockaddr_storage()

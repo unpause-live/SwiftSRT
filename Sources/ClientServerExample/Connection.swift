@@ -22,6 +22,12 @@ final class Connection: ChannelInboundHandler {
         self.connected = connected
     }
 
+    public func getName() -> EventLoopFuture<String>? {
+        try? self.ctx?.channel.getOption(SrtChannelOptions.streamID).map {
+            $0 as! String
+        }
+    }
+
     // Invoked on client connection
     public func channelRegistered(context: ChannelHandlerContext) { }
 
