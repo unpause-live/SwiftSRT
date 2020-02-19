@@ -19,6 +19,7 @@ let connected: ConnectionStateCallback = {
     conn = $0
     if !isServer {
         // have the client write some data
+        print("Sending \(buf.readableBytes) bytes, it will appear as several buffers on the server.")
         conn?.write(buf)?.whenComplete { result in
             print("write result=\(result)")
         }
@@ -52,8 +53,7 @@ if isServer {
         // processing through EchoHandler.
         // This is to protect the server from overload.
         .childChannelInitializer { channel in
-            print("in childChannelInitializer \(channel)")
-            return channel.pipeline.addHandler(BackPressureHandler()).flatMap { _ in
+            channel.pipeline.addHandler(BackPressureHandler()).flatMap { _ in
                 channel.pipeline.addHandler(Connection(connected: connected, received: recv, ended: ended))
             }
         }

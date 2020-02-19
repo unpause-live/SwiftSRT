@@ -139,9 +139,7 @@ public class SrtEventLoopGroup: EventLoop {
                 self?.childChannels[channel.socket().descriptor] = Weak(value: channel)
             } else if let channel = channel as? SrtServerChannel {
                 let descriptor = channel.socket().descriptor
-                print("registering server channel with fd \(descriptor) self=\(self)")
                 self?.serverChannels[descriptor] = Weak(value: channel)
-                print("channel is \(self?.serverChannels[descriptor])")
             }
             return result
         }

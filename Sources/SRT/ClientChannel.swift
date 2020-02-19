@@ -182,7 +182,6 @@ extension SrtClientChannel: ChannelCore {
 
     /// Try to flush out all previous written messages that are pending.
     func flush0() {
-        print("ChildChannel.flush0")
     }
 
     /// Request that the `Channel` perform a read when data is ready.
@@ -245,7 +244,6 @@ extension SrtClientChannel: SrtChannel {
                 result = try buffer.withUnsafeMutableWritableBytes {
                     try self._socket.read(pointer: $0)
                 }
-                self._pipeline.fireChannelRead(NIOAny(buffer))
                 switch result {
                 case .wouldBlock:
                     self._pipeline.fireChannelReadComplete()
@@ -255,6 +253,9 @@ extension SrtClientChannel: SrtChannel {
                         // eof
                         self._pipeline.fireChannelInactive()
                         return
+                    } else {
+                        buffer.moveWriterIndex(forwardBy: Int(value))
+                        self._pipeline.fireChannelRead(NIOAny(buffer))
                     }
                 }
             } while true

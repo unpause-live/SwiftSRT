@@ -170,7 +170,6 @@ class SrtServerSocket: SrtBaseSocket {
     /// - throws: An `SrtError` if creation of the socket failed.
     func listen(backlog: Int32 = 128) throws {
         _ = try checkError(srt_listen(super.descriptor, backlog))
-        print("Listening")
     }
 
     func accept(setNonBlocking: Bool = true) throws -> SrtSocket {

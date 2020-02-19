@@ -124,7 +124,6 @@ public final class SrtServerBootstrap {
               let childGroup = self.childGroup as? SrtEventLoopGroup else {
             fatalError("SrtServerBootstrap currently only supports SrtEventLoop")
         }
-        print("at bind")
         let channel = try SrtServerChannel(childInitializer: childChannelInit,
                                            childOptions: childChannelOptions,
                                            eventLoop: group,
