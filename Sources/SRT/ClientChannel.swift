@@ -3,7 +3,7 @@ import CSRT
 import Foundation
 import Dispatch
 
-internal final class SrtChildChannel {
+internal final class SrtClientChannel {
     /// The `ByteBufferAllocator` for this `Channel`.
     public let allocator = ByteBufferAllocator()
     public typealias InboundOut = ByteBuffer
@@ -27,7 +27,13 @@ internal final class SrtChildChannel {
 
     private let _socket: SrtSocket
 
+    private var _active: Bool = false
+
+    private var _writable: Bool = false
+
     private let sendQueue: DispatchQueue
+
+    private let openPromise: EventLoopPromise<Void>
 
     internal init(channelInit: ChannelInitializerCallback? = nil,
                   socket: SrtSocket? = nil,
@@ -36,6 +42,7 @@ internal final class SrtChildChannel {
         self.channelInit = channelInit
         self._eventLoop = eventLoop
         self.closePromise = eventLoop.makePromise()
+        self.openPromise = eventLoop.makePromise()
         self.parent = parent
         self._socket = try socket ?? SrtSocket()
         self.sendQueue = DispatchQueue(label: "sendQueue.\(UUID().uuidString)")
@@ -44,7 +51,7 @@ internal final class SrtChildChannel {
     }
 }
 
-extension SrtChildChannel: ChannelOutboundInvoker {
+extension SrtClientChannel: ChannelOutboundInvoker {
     /// Write data into the `Channel`, automatically wrapping with `NIOAny`.
     ///
     /// - seealso: `ChannelOutboundInvoker.write`.
@@ -76,7 +83,7 @@ extension SrtChildChannel: ChannelOutboundInvoker {
     var eventLoop: EventLoop { _eventLoop }
 }
 
-extension SrtChildChannel: ChannelCore {
+extension SrtClientChannel: ChannelCore {
     /// Returns the local bound `SocketAddress`.
     func localAddress0() throws -> SocketAddress { try self.socket().localAddress() }
 
@@ -113,10 +120,14 @@ extension SrtChildChannel: ChannelCore {
     ///     - promise: The `EventLoopPromise` which should be notified once the operation completes, or nil if no notification should take place.
     func connect0(to address: SocketAddress, promise: EventLoopPromise<Void>?) {
         do {
-            try self._socket.connect(to: address)
-            self.channelInit?(self)
-            self._pipeline.fireChannelActive()
-            promise?.succeed(())
+            guard try self._socket.connect(to: address) else {
+                promise?.fail(ChannelError.operationUnsupported)
+                return
+            }
+            self.channelInit?(self).whenComplete { _ in
+                self._pipeline.fireChannelActive()
+                promise?.succeed(())
+            }
         } catch {
             promise?.fail(error)
         }
@@ -128,6 +139,14 @@ extension SrtChildChannel: ChannelCore {
     ///     - data: The data to write, wrapped in a `NIOAny`.
     ///     - promise: The `EventLoopPromise` which should be notified once the operation completes, or nil if no notification should take place.
     func write0(_ data: NIOAny, promise: EventLoopPromise<Void>?) {
+        if !self._writable {
+            // plug the queue until the connection is writable
+            self.sendQueue.async { [weak self] in
+                do { 
+                    try self?.openPromise.futureResult.wait()
+                } catch {}
+            }
+        }
         self.sendQueue.async { [weak self] in
             guard let strongSelf = self else { return }
             var data = strongSelf.unwrapData(data, as: ByteBuffer.self)
@@ -172,6 +191,7 @@ extension SrtChildChannel: ChannelCore {
         } catch {
             promise?.fail(error)
         }
+        self._eventLoop.unregisterChannel(self)
         self.closePromise.succeed(())
     }
 
@@ -201,11 +221,10 @@ extension SrtChildChannel: ChannelCore {
     }
 }
 
-extension SrtChildChannel: SrtChannel {
+extension SrtClientChannel: SrtChannel {
     internal func socket() -> SrtBaseSocket { self._socket }
 
     internal func readTrigger() {
-        print("ChildChannel.readTrigger")
         do {
             var result: IOResult<Int32>
             repeat {
@@ -214,18 +233,35 @@ extension SrtChildChannel: SrtChannel {
                     try self._socket.read(pointer: $0)
                 }
                 self._pipeline.fireChannelRead(NIOAny(buffer))
-                if case .wouldBlock = result {
-                    print("finished read")
+                switch result {
+                case .wouldBlock:
                     self._pipeline.fireChannelReadComplete()
                     return
+                case .processed(let value):
+                    if value == 0 {
+                        // eof
+                        self._pipeline.fireChannelInactive()
+                        return
+                    }
                 }
             } while true
+        } catch SrtMajorError.connection(let minor) {
+            if minor == .connLost {
+                self._pipeline.fireChannelInactive()
+                self._pipeline.close()
+            }
         } catch {
-            // Caught socket error - report it.
+            // Caught some other error - report it.
+            self._pipeline.fireErrorCaught(error)
         }
     }
 
     internal func writeTrigger() {
+        if self._active == false {
+            self._active = true
+            self._writable = true
+            self.openPromise.succeed(())
+        }
         self._pipeline.fireChannelWritabilityChanged()
     }
 
@@ -247,7 +283,8 @@ extension SrtChildChannel: SrtChannel {
     /// Whether this channel is currently writable.
     public var isWritable: Bool {
         // TODO: implement
-        return true
+        //return true
+        _writable
     }
 
     // swiftlint:disable:next identifier_name

@@ -41,16 +41,18 @@ final class Connection: ChannelInboundHandler {
         }
     }
 
-    public func write(_ bytes: ByteBuffer) {
-        if let ctx = self.ctx {
-            ctx.pipeline.eventLoop.execute { [weak self] in
-                guard let strongSelf = self else {
-                    return
-                }
-                let data = strongSelf.wrapOutboundOut(bytes)
-                ctx.writeAndFlush(data, promise: nil)
+    public func write(_ bytes: ByteBuffer) -> EventLoopFuture<Void>? {
+        guard let ctx = self.ctx else { return nil }
+
+        let promise = ctx.pipeline.eventLoop.makePromise(of: Void.self)
+        ctx.pipeline.eventLoop.execute { [weak self] in
+            guard let strongSelf = self else {
+                return
             }
+            let data = strongSelf.wrapOutboundOut(bytes)
+            ctx.writeAndFlush(data, promise: promise)
         }
+        return promise.futureResult
     }
 
     // Invoked when data are received from the client

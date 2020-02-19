@@ -9,4 +9,3 @@ protocol SrtChannel: Channel {
 
     func errorTrigger()
 }
-

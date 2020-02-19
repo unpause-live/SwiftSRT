@@ -117,7 +117,9 @@ public final class SrtServerBootstrap {
                                            childLoopGroup: childGroup)
         return group.next().submit {
             channel.bind(to: try makeSocketAddress(), promise: nil)
-            _ = group.registerChannel(channel, Int32(SRT_EPOLL_IN.rawValue | SRT_EPOLL_ERR.rawValue))
+            // Because of the way Swift enforces integer overflows, we can't use the SRT_EPOLL_ET constant here
+            _ = group.registerChannel(channel, -2147483648 | Int32(SRT_EPOLL_IN.rawValue |
+                                                                   SRT_EPOLL_ERR.rawValue))
             return channel
         }
     }
@@ -163,22 +165,15 @@ public final class SrtClientBootstrap {
         guard let group = self.group as? SrtEventLoopGroup else {
             fatalError("SrtClientBootstrap currently only supports SrtEventLoop")
         }
-        let channel = try SrtChildChannel(channelInit: self.channelInit, eventLoop: group)
-
-        return group.next().submit {
-            channel.connect(to: try makeSocketAddress(), promise: nil)
-            _ = group.registerChannel(channel, Int32(SRT_EPOLL_IN.rawValue |
-                                                     SRT_EPOLL_OUT.rawValue |
-                                                     SRT_EPOLL_ERR.rawValue))
-
-            return channel
+        let channel = try SrtClientChannel(channelInit: self.channelInit, eventLoop: group)
+        let events: Int32 = -2147483648 | Int32(SRT_EPOLL_IN.rawValue |
+                                       SRT_EPOLL_OUT.rawValue |
+                                       SRT_EPOLL_ERR.rawValue)
+        return group.registerChannel(channel, events).flatMap { _ in
+            group.submit {
+                channel.connect(to: try makeSocketAddress(), promise: nil)
+                return channel
+            }
         }
     }
 }
-// swiftlint:disable nesting
-extension ChannelOptions {
-    public enum SrtTypes {
-
-    }
-}
-// swiftlint:enable nesting

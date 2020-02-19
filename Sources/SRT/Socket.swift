@@ -12,6 +12,9 @@ class SrtBaseSocket {
 
     internal init(descriptor: SrtSocketDescriptor, setNonBlocking: Bool) throws {
         self.descriptor = descriptor
+        var yesVal: Bool = true
+        _ = try checkError(srt_setsockflag(descriptor, SRTO_RCVSYN, &yesVal, Int32(MemoryLayout<Bool>.size)))
+        _ = try checkError(srt_setsockflag(descriptor, SRTO_SNDSYN, &yesVal, Int32(MemoryLayout<Bool>.size)))
         if setNonBlocking {
             var noVal: Bool = false
             _ = try checkError(srt_setsockopt(descriptor, 0, SRTO_RCVSYN, &noVal, Int32(MemoryLayout<Bool>.size)))
@@ -42,7 +45,7 @@ class SrtBaseSocket {
     final func setOption<T>(level: Int32, name: Int32, value: T) throws {
         var value = value
         let size = Int32(MemoryLayout<T>.size)
-        _ = try checkError(srt_setsockopt(descriptor, level, SRT_SOCKOPT(rawValue: UInt32(name)), &value, size))
+        _ = try checkError(srt_setsockflag(descriptor, SRT_SOCKOPT(rawValue: UInt32(name)), &value, size))
     }
 
     func getOption<T>(level: Int32, name: Int32) throws -> T {
@@ -58,7 +61,7 @@ class SrtBaseSocket {
             storage.deallocate()
         }
 
-        _ = try checkError(srt_getsockopt(descriptor, level, SRT_SOCKOPT(rawValue: UInt32(name)), val, &size))
+        _ = try checkError(srt_getsockflag(descriptor, SRT_SOCKOPT(rawValue: UInt32(name)), val, &size))
         return val.pointee
     }
 

@@ -69,6 +69,18 @@ public class SrtEventLoopGroup: EventLoop {
         return promise.futureResult
     }
 
+    public func submitOnPollQueue<T>(_ task: @escaping () throws -> T) -> EventLoopFuture<T> {
+        let promise = makePromise(of: T.self)
+        self.pollQueue.async {
+            do {
+                promise.succeed(try task())
+            } catch {
+                promise.fail(error)
+            }
+        }
+        return promise.futureResult
+    }
+
     /// Schedule a `task` that is executed by this `SelectableEventLoop` at the given time.
     @discardableResult
     public func scheduleTask<T>(deadline: NIODeadline, _ task: @escaping () throws -> T) -> Scheduled<T> {
@@ -107,10 +119,10 @@ public class SrtEventLoopGroup: EventLoop {
 
     internal func registerChannel(_ channel: SrtChannel, _ events: Int32) -> EventLoopFuture<Int32> {
         let epid = self.epid
-        return submit { [weak self] in
+        return submitOnPollQueue { [weak self] in
             var events = events
             let result = try checkError(srt_epoll_add_usock(epid, channel.socket().descriptor, &events))
-            if let channel = channel as? SrtChildChannel {
+            if let channel = channel as? SrtClientChannel {
                 self?.childChannels[channel.socket().descriptor] = Weak(value: channel)
             } else if let channel = channel as? SrtServerChannel {
                 let descriptor = channel.socket().descriptor
@@ -124,7 +136,7 @@ public class SrtEventLoopGroup: EventLoop {
 
     internal func unregisterChannel(_ channel: SrtChannel) -> EventLoopFuture<Int32> {
         let epid = self.epid
-        return submit { [weak self] in
+        return submitOnPollQueue { [weak self] in
             let result = try checkError(srt_epoll_remove_usock(epid, channel.socket().descriptor))
             self?.childChannels.removeValue(forKey: channel.socket().descriptor)
             self?.serverChannels.removeValue(forKey: channel.socket().descriptor)
@@ -140,7 +152,7 @@ public class SrtEventLoopGroup: EventLoop {
             var writefds = [Int32](repeating: 0, count: strongSelf.childChannels.count)
             var readfdlen = Int32(readfds.count)
             var writefdlen = Int32(writefds.count)
-            srt_epoll_wait(strongSelf.epid, &readfds, &readfdlen, &writefds, &writefdlen, 1000, nil, nil, nil, nil)
+            srt_epoll_wait(strongSelf.epid, &readfds, &readfdlen, &writefds, &writefdlen, 100, nil, nil, nil, nil)
             for idx in 0..<Int(readfdlen) {
                 let readfd = readfds[idx]
                 strongSelf.serverChannels[readfd]?.value?.readTrigger()
@@ -157,10 +169,10 @@ public class SrtEventLoopGroup: EventLoop {
 
     private let epid: Int32
     private let queue: DispatchQueue
-    private let pollQueue: DispatchQueue
+    internal let pollQueue: DispatchQueue
     private let inQueueKey: DispatchSpecificKey<UUID>
     private let loopID: UUID
-    private var childChannels: [Int32: Weak<SrtChildChannel>]
+    private var childChannels: [Int32: Weak<SrtClientChannel>]
     private var serverChannels: [Int32: Weak<SrtServerChannel>]
     private var running = true
 }

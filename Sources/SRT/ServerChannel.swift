@@ -189,17 +189,18 @@ extension SrtServerChannel: SrtChannel {
 
     internal func readTrigger() {
         // accept
-        print("ServerChannel.readTrigger")
         do {
             let socket = try self.serverSocket.accept()
-            let child = try SrtChildChannel(socket: socket, parent: self, eventLoop: self.childLoopGroup)
-            self.childLoopGroup.registerChannel(child, Int32(SRT_EPOLL_IN.rawValue |
-                                                             SRT_EPOLL_OUT.rawValue |
-                                                             SRT_EPOLL_ERR.rawValue))
+            let child = try SrtClientChannel(socket: socket, parent: self, eventLoop: self.childLoopGroup)
+            // Because of the way Swift enforces integer overflows, we can't use the SRT_EPOLL_ET constant here
+            let events: Int32 = -2147483648 | Int32(SRT_EPOLL_IN.rawValue |
+                                       SRT_EPOLL_OUT.rawValue |
+                                       SRT_EPOLL_ERR.rawValue)
+            self.childLoopGroup.registerChannel(child, events)
             self.childChannelInit?(child)
             child.pipeline.fireChannelActive()
         } catch {
-            print("Caught error when accepting \(error)")
+            self._pipeline.fireErrorCaught(error)
         }
     }
 

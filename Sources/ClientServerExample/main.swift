@@ -20,18 +20,19 @@ let connected: ConnectionStateCallback = {
     conn = $0
     if !isServer {
         // have the client write some data
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
-            conn?.write(buf)
+        conn?.write(buf)?.whenComplete { result in
+            print("write result=\(result)")
         }
     }
 }
 
-let recv: ConnectionDataCallback = { conn, data in
-    print("got some data")
+let recv: ConnectionDataCallback = { _, data in
+    print("got some data \(data)")
 }
 
-let ended: ConnectionStateCallback = { conn in
+let ended: ConnectionStateCallback = { _ in
     print("conn ended")
+    conn = nil
 }
 
 if isServer {
