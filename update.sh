@@ -18,6 +18,7 @@ sed -e "s/@SRT_VERSION_MAJOR@/${VERSION_PARTS[0]}/g" srtcore/version.h.tmp > srt
 sed -e "s/@SRT_VERSION_MINOR@/${VERSION_PARTS[1]}/g" srtcore/version.h.tmp1 > srtcore/version.h.tmp2
 sed -e "s/@SRT_VERSION_PATCH@/${VERSION_PARTS[2]}/g" srtcore/version.h.tmp2 > srtcore/version.h.tmp3
 sed -e "s/#cmakedefine/\/\/#define/g" srtcore/version.h.tmp3 > srtcore/version.h
+
 cp srtcore/*.h ../../Sources/CSRT/include
 cp srtcore/*.c* ../../Sources/CSRT
 
@@ -37,7 +38,7 @@ cd ../../..
 
 cat <<-EOT > Sources/CSRT/include/module.modulemap
 module CSRT [system] {
-   header "srt.h"
+    header "srt.h"
 }
 EOT
 

@@ -235,7 +235,11 @@ extension SocketAddress {
         var hints = addrinfo()
         hints.ai_flags = AI_PASSIVE
         hints.ai_family = protocolFamily
+#if os(Linux)
+        hints.ai_socktype = Int32(SOCK_DGRAM.rawValue)
+#else
         hints.ai_socktype = SOCK_DGRAM
+#endif
 
         guard getaddrinfo(host, String(port), &hints, &info) == 0  else {
             throw SocketAddressError.unknown(host: host, port: port)
@@ -294,10 +298,10 @@ extension sockaddr_storage {
 
     mutating func convert() throws -> SocketAddress {
         switch self.ss_family {
-        case UInt8(AF_INET):
+        case sa_family_t(AF_INET):
             var sockAddr: sockaddr_in = self.convert()
             return  SocketAddress(sockAddr, host: try sockAddr.addressDescription())
-        case UInt8(AF_INET6):
+        case sa_family_t(AF_INET6):
             var sockAddr: sockaddr_in6 = self.convert()
             return SocketAddress(sockAddr, host: try sockAddr.addressDescription())
         default:
@@ -306,8 +310,8 @@ extension sockaddr_storage {
     }
 
     mutating func withMutableSockAddr<R>(_ body: (UnsafeMutablePointer<sockaddr>, Int) throws -> R) rethrows -> R {
-        return try withUnsafeMutableBytes(of: &self) { p in
-            try body(p.baseAddress!.assumingMemoryBound(to: sockaddr.self), p.count)
+        return try withUnsafeMutableBytes(of: &self) { ptr in
+            try body(ptr.baseAddress!.assumingMemoryBound(to: sockaddr.self), ptr.count)
         }
     }
 }
